@@ -13,8 +13,29 @@
 
 namespace fs = std::filesystem;
 
+class Wow64RedirectionDisabler
+{
+#ifndef _X64_
+	PVOID mOldValue;
+	BOOL  mOk;
+public:
+	Wow64RedirectionDisabler() noexcept
+	{
+		mOk = Wow64DisableWow64FsRedirection(&mOldValue);
+	}
+
+	~Wow64RedirectionDisabler()
+	{
+		if (mOk != FALSE)
+			Wow64RevertWow64FsRedirection(mOldValue);
+	}
+#endif
+};
+
 static bool ReadNtdll(std::vector<uint8_t>& buffer)
 {
+	Wow64RedirectionDisabler disabler;
+
 	wchar_t windirBuffer[128] = {};
 	auto res = GetEnvironmentVariableW(L"WINDIR", windirBuffer, 128);
 	if (res == 0)
@@ -108,14 +129,29 @@ typedef enum _MEMORY_INFORMATION_CLASS {
 	MemoryBasicInformation
 } MEMORY_INFORMATION_CLASS;
 
-typedef NTSTATUS (NTAPI *NtQueryVirtualMemory_t)(
-	HANDLE                   ProcessHandle,
-	PVOID                    BaseAddress,
-	MEMORY_INFORMATION_CLASS MemoryInformationClass,
-	PVOID                    MemoryInformation,
-	SIZE_T                   MemoryInformationLength,
-	PSIZE_T                  ReturnLength
+typedef NTSTATUS (NTAPI *NtQueryVirtualMemory64_t)(
+	uint64_t ProcessHandle,
+	uint64_t BaseAddress,
+	uint64_t MemoryInformationClass,
+	uint64_t MemoryInformation,
+	uint64_t MemoryInformationLength,
+	uint64_t ReturnLength
 );
+
+#if !_X64_
+extern "C" NTSTATUS X64Function(uint64_t Func, uint32_t Argc, uint64_t Arg0, uint64_t Arg1, uint64_t Arg2, uint64_t Arg3, ...);
+#endif // _X64_
+
+template <class Func, class... Args>
+NTSTATUS X64Syscall(Func func, Args... args)
+{
+#if _X64_
+	typedef NTSTATUS(NTAPI* Func_t)(Args...);
+	return ((Func_t)func)(args...);
+#else
+	return X64Function((uint64_t)func, sizeof...(args), (uint64_t)args...);
+#endif // _X64_
+}
 
 int main()
 {
@@ -126,9 +162,9 @@ int main()
 	auto functionMap = ParseNtdll(ntdllBuffer);
 	auto code = GetNtdllCode(functionMap, ntdllBuffer);
 
-	auto NtQueryVirtualMemory = (NtQueryVirtualMemory_t)(code + functionMap["NtQueryVirtualMemory"]);
+	auto NtQueryVirtualMemory64 = (NtQueryVirtualMemory64_t)(code + functionMap["NtQueryVirtualMemory"]);
 	MEMORY_BASIC_INFORMATION64 mbi = {};
-	auto status = NtQueryVirtualMemory(GetCurrentProcess(), code, MemoryBasicInformation, &mbi, sizeof(mbi), nullptr);
+	auto status = X64Syscall(NtQueryVirtualMemory64, GetCurrentProcess(), code, MemoryBasicInformation, &mbi, sizeof(mbi), nullptr);
 
 	VirtualFree(code, 0, MEM_FREE);
 
