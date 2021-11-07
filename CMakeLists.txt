@@ -1,14 +1,17 @@
 cmake_minimum_required(VERSION 3.15)
 
-project(IPC)
+project(SyscallHider)
 set(CMAKE_CXX_STANDARD 17)
 
 include_directories(${PROJECT_SOURCE_DIR}/include)
 
 set(NTDLL64LL ${PROJECT_SOURCE_DIR}/lib/ntdll64ll.obj)
 
-add_executable(poc ${IPC_COMMON_SOURCES}
-                   source/main.cpp)
+set(HIDER_COMMON source/parser.cpp)
+
+add_executable(poc ${HIDER_COMMON}
+                   source/main.cpp
+                   source/util.cpp)
                                      
 if (CMAKE_SIZEOF_VOID_P EQUAL 8)
     add_definitions(-D_X64_=1)
