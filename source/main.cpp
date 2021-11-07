@@ -1,9 +1,13 @@
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
+#include <exception>
 #include <filesystem>
 #include <climits>
 #include <map>
 #include <memory>
+#include <string>
+#include <string_view>
 #include <vector>
 
 #include <windows.h>
@@ -26,7 +30,7 @@ public:
 
 	~Wow64RedirectionDisabler()
 	{
-		if (mOk != FALSE)
+		if (mOk)
 			Wow64RevertWow64FsRedirection(mOldValue);
 	}
 #endif
@@ -55,7 +59,7 @@ static bool ReadNtdll(std::vector<uint8_t>& buffer)
 		return false;
 
 	std::unique_ptr<FILE, int(*)(FILE*)> file(pFile, fclose);
-	fread(buffer.data(), 1, size, pFile);
+	fread(buffer.data(), 1, size, file.get());
 
 	return true;
 }
@@ -71,41 +75,92 @@ static uint32_t RVAtoOffset(uint32_t rva, const std::vector<IMAGE_SECTION_HEADER
 	return 0;
 }
 
-static auto ParseNtdll(const std::vector<uint8_t>& buffer)
+class BufferSafeAccessor
 {
-	std::map<std::string, uint32_t> result;
+	const std::vector<uint8_t>& mBuffer;
+	size_t mPosition;
+public:
+	BufferSafeAccessor(const std::vector<uint8_t>& buffer) : mBuffer(buffer), mPosition(0) {}
 
-	auto pDosHeader = (const IMAGE_DOS_HEADER*)buffer.data();
-	auto pNtHeader = (const IMAGE_NT_HEADERS64*)(buffer.data() + pDosHeader->e_lfanew);
-
-	std::vector<IMAGE_SECTION_HEADER> sections(pNtHeader->FileHeader.NumberOfSections);
-	memcpy(sections.data(), pNtHeader + 1, sections.size() * sizeof(IMAGE_SECTION_HEADER));
-
-	auto exportDirOffset = RVAtoOffset(pNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress, sections);
-	auto exportDir = (const IMAGE_EXPORT_DIRECTORY*)(buffer.data() + exportDirOffset);
-	auto pNamesOffset = RVAtoOffset(exportDir->AddressOfNames, sections);
-	auto pNamesToIndexOffset = RVAtoOffset(exportDir->AddressOfNameOrdinals, sections);
-	auto pFuncOffset = RVAtoOffset(exportDir->AddressOfFunctions, sections);
-
-	auto pNames = (const uint32_t*)(buffer.data() + pNamesOffset);
-	auto pFunc = (const uint32_t*)(buffer.data() + pFuncOffset);
-	auto pNamesToIndex = (const uint16_t*)(buffer.data() + pNamesToIndexOffset);
-
-	for (size_t i = 0; i < exportDir->NumberOfNames; ++i)
+	template <class T>
+	const T* GetPointer(size_t count = 1)
 	{
-		auto nameOffset = RVAtoOffset(pNames[i], sections);
-		auto funcOffset = RVAtoOffset(pFunc[pNamesToIndex[i]], sections);
-		std::string name = (const char*)(buffer.data() + nameOffset);
-		if (name.compare(0, 2, "Nt") == 0)
-			result.emplace(std::move(name), funcOffset);
+		const auto startPosition = mPosition;
+		mPosition += sizeof(T) * count;
+		if (mBuffer.size() < mPosition)
+		{
+			mPosition = startPosition;
+			throw std::out_of_range("Buffer is not long enough");
+		}
+
+		return (const T*)(&mBuffer[startPosition]);
 	}
+
+	std::string_view GetString()
+	{
+		const size_t startPosition = mPosition;
+		for (; mPosition < mBuffer.size(); ++mPosition)
+		{
+			if (mBuffer[mPosition] == 0)
+				return std::string_view((const char*)&mBuffer[startPosition], mPosition - startPosition);
+		}
+		
+		mPosition = startPosition;
+		throw std::out_of_range("Unable to find string end");
+	}
+
+	BufferSafeAccessor& Seek(size_t position)
+	{
+		if (position > mBuffer.size())
+			throw std::out_of_range("Buffer is not long enough");
+
+		mPosition = position;
+		return *this;
+	}
+};
+
+static auto ParseNtdll(BufferSafeAccessor buffer)
+{
+	std::map<std::string_view, uint32_t> result;
+
+	try
+	{
+		auto pDosHeader = buffer.GetPointer<IMAGE_DOS_HEADER>();
+		auto pNtHeader = buffer.Seek(pDosHeader->e_lfanew).GetPointer<IMAGE_NT_HEADERS64>();
+		auto pSections = buffer.GetPointer<IMAGE_SECTION_HEADER>(pNtHeader->FileHeader.NumberOfSections);
+
+		std::vector<IMAGE_SECTION_HEADER> sections(pSections, pSections + pNtHeader->FileHeader.NumberOfSections);
+		auto exportDirOffset = RVAtoOffset(pNtHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress, sections);
+		auto exportDir = buffer.Seek(exportDirOffset).GetPointer<IMAGE_EXPORT_DIRECTORY>();
+		auto namesOffset = RVAtoOffset(exportDir->AddressOfNames, sections);
+		auto namesToIndexOffset = RVAtoOffset(exportDir->AddressOfNameOrdinals, sections);
+		auto funcOffset = RVAtoOffset(exportDir->AddressOfFunctions, sections);
+
+		auto pNames = buffer.Seek(namesOffset).GetPointer<uint32_t>(exportDir->NumberOfNames);
+		auto pFunc = buffer.Seek(funcOffset).GetPointer<uint32_t>(exportDir->NumberOfFunctions);
+		auto pNamesToIndex = buffer.Seek(namesToIndexOffset).GetPointer<uint16_t>(exportDir->NumberOfNames);
+
+		for (size_t i = 0; i < exportDir->NumberOfNames; ++i)
+		{
+			auto nameOffset = RVAtoOffset(pNames[i], sections);
+			auto nameToFunc = pNamesToIndex[i];
+			if (nameToFunc >= exportDir->NumberOfFunctions)
+				continue;
+
+			auto funcOffset = RVAtoOffset(pFunc[nameToFunc], sections);
+			auto name = buffer.Seek(nameOffset).GetString();
+			if (name.compare(0, 2, "Nt") == 0)
+				result.emplace(name, funcOffset);
+		}
+	}
+	catch (const std::out_of_range&) {}
 		
 	return result;
 }
 
 const uint32_t PAGE_SIZE = 4096;
 
-static uint8_t* GetNtdllCode(std::map<std::string, uint32_t>& functions, const std::vector<uint8_t>& buffer)
+static auto GetNtdllCode(std::map<std::string_view, uint32_t>& functions, const std::vector<uint8_t>& buffer)
 {
 	uint32_t lower = std::numeric_limits<uint32_t>::max(),
 		upper = 0;
@@ -115,14 +170,20 @@ static uint8_t* GetNtdllCode(std::map<std::string, uint32_t>& functions, const s
 		upper = std::max(item.second + PAGE_SIZE, upper);
 	}
 
+	auto deleter = [](void* p) noexcept { VirtualFree(p, 0, MEM_FREE); };
+
 	auto size = upper - lower;
 	auto execBuffer = (uint8_t*)VirtualAlloc(nullptr, size, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-	memcpy(execBuffer, buffer.data() + lower, size);
+	std::unique_ptr<uint8_t[], decltype(deleter)> result(execBuffer, deleter);
+	if (!result)
+		return result;
+	
+	memcpy(result.get(), buffer.data() + lower, size);
 
 	for (auto& item : functions)
 		item.second -= lower;
 
-	return execBuffer;
+	return result;
 }
 
 typedef enum _MEMORY_INFORMATION_CLASS {
@@ -153,20 +214,64 @@ NTSTATUS X64Syscall(Func func, Args... args)
 #endif // _X64_
 }
 
+#ifndef NT_SUCCESS
+#define NT_SUCCESS(status) ((int)(status) >= 0)
+#endif // NT_SUCCESS
+
+#define GET_SYSCALL_PTR(Name) (Name##64_t)(code.get() + functionMap[#Name])
+
+static bool EnableVTMode() noexcept
+{
+	HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+	if (hOut == INVALID_HANDLE_VALUE)
+		return false;
+
+	DWORD dwMode = 0;
+	if (!GetConsoleMode(hOut, &dwMode))
+		return false;
+
+	dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+	return SetConsoleMode(hOut, dwMode);
+}
+
 int main()
 {
-	std::vector<uint8_t> ntdllBuffer;
-	if (!ReadNtdll(ntdllBuffer))
+	if (!EnableVTMode())
+	{
+		printf("Unable to prepare terminal\n");
 		return 1;
+	}
 
-	auto functionMap = ParseNtdll(ntdllBuffer);
-	auto code = GetNtdllCode(functionMap, ntdllBuffer);
+	try
+	{
+		std::vector<uint8_t> ntdllBuffer;
+		if (!ReadNtdll(ntdllBuffer))
+			throw std::exception("unable to read NTDLL");
 
-	auto NtQueryVirtualMemory64 = (NtQueryVirtualMemory64_t)(code + functionMap["NtQueryVirtualMemory"]);
-	MEMORY_BASIC_INFORMATION64 mbi = {};
-	auto status = X64Syscall(NtQueryVirtualMemory64, GetCurrentProcess(), code, MemoryBasicInformation, &mbi, sizeof(mbi), nullptr);
+		auto functionMap = ParseNtdll(ntdllBuffer);
+		if (functionMap.empty())
+			throw std::exception("unable to parse NTDLL");
 
-	VirtualFree(code, 0, MEM_FREE);
+		auto code = GetNtdllCode(functionMap, ntdllBuffer);
+		if (!code)
+			throw std::exception("unable to allocate executable buffer");
 
+		auto NtQueryVirtualMemory64 = GET_SYSCALL_PTR(NtQueryVirtualMemory);
+		MEMORY_BASIC_INFORMATION64 mbi = {};
+		auto status = X64Syscall(NtQueryVirtualMemory64, GetCurrentProcess(), code.get(), MemoryBasicInformation, &mbi, sizeof(mbi), nullptr);
+		if (!NT_SUCCESS(status))
+		{
+			char message[512];
+			sprintf(message, "NtQueryVirtualMemory failed (status = 0x%08x)", (unsigned)status);
+			throw std::exception(message);
+		}
+	}
+	catch (const std::exception& ex)
+	{
+		printf("\x1b[91mError: %s\n\x1b[m", ex.what());
+		return 2;
+	}
+
+	printf("\x1b[92mTest has been passed!\n\x1b[m");
 	return 0;
 }
