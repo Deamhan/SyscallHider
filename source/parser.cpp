@@ -63,50 +63,6 @@ static uint32_t RVAtoOffset(uint32_t rva, const std::vector<IMAGE_SECTION_HEADER
 	return 0;
 }
 
-class BufferSafeAccessor
-{
-	const std::vector<uint8_t>& mBuffer;
-	size_t mPosition;
-public:
-	BufferSafeAccessor(const std::vector<uint8_t>& buffer) : mBuffer(buffer), mPosition(0) {}
-
-	template <class T>
-	const T* GetPointer(size_t count = 1)
-	{
-		const auto startPosition = mPosition;
-		mPosition += sizeof(T) * count;
-		if (mBuffer.size() < mPosition)
-		{
-			mPosition = startPosition;
-			throw std::out_of_range("buffer is not long enough");
-		}
-
-		return (const T*)(&mBuffer[startPosition]);
-	}
-
-	std::string_view GetString()
-	{
-		const size_t startPosition = mPosition;
-		for (; mPosition < mBuffer.size(); ++mPosition)
-		{
-			if (mBuffer[mPosition] == 0)
-				return std::string_view((const char*)&mBuffer[startPosition], mPosition - startPosition);
-		}
-
-		mPosition = startPosition;
-		throw std::out_of_range("unable to find string end");
-	}
-
-	BufferSafeAccessor& Seek(size_t position)
-	{
-		if (position > mBuffer.size())
-			throw std::out_of_range("buffer is not long enough");
-
-		mPosition = position;
-		return *this;
-	}
-};
-
 static syscall_map ParseNtdllExport(BufferSafeAccessor buffer)
 {
 	syscall_map result;
