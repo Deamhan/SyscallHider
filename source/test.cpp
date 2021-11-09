@@ -41,6 +41,13 @@ int main()
 			sprintf(message, "NtQueryVirtualMemory failed (status = 0x%08x)", (unsigned)status);
 			throw std::exception(message);
 		}
+
+		if (mbi.AllocationBase != (ULONGLONG)ntdll.first.get())
+		{
+			char message[512];
+			sprintf(message, "Invalid data has been received from syscall");
+			throw std::exception(message);
+		}
 	}
 	catch (const std::exception& ex)
 	{
