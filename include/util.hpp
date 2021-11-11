@@ -77,14 +77,15 @@ typedef NTSTATUS(NTAPI* NtQueryVirtualMemory64_t)(
 
 void EnableVTMode();
 
-uint64_t ProcessImage(
+std::pair<uint64_t, bool> ProcessImage(
 	uint64_t address,
 	NtReadVirtualMemory64_t NtReadVirtualMemory,
 	uint64_t processHandle);
 
-uintptr_t GetExeEntryPoint(
+std::pair<uint64_t, bool> GetExeEntryPoint(
 	NtQueryVirtualMemory64_t NtQueryVirtualMemory,
 	NtReadVirtualMemory64_t NtReadVirtualMemory,
 	uint64_t processHandle);
 
+template <bool isAMD64>
 std::vector<uint8_t> GetCodeBuffer(const std::string& dllPath, const std::string& funcName, uintptr_t ep);

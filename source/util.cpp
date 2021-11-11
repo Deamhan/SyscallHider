@@ -1,5 +1,6 @@
 #include "util.hpp"
 
+#include <array>
 #include <cinttypes>
 #include <string>
 #include <vector>
@@ -21,7 +22,14 @@ void EnableVTMode()
 		throw std::system_error(GetLastError(), std::system_category());
 }
 
-uint64_t ProcessImage(
+template <class OptHeader>
+inline uint64_t GetEntryPoint(BufferSafeAccessor& accessor, uint64_t address)
+{
+	auto optHeader = accessor.GetPointer<OptHeader>();
+	return address + optHeader->AddressOfEntryPoint;
+}
+
+std::pair<uint64_t, bool> ProcessImage(
 	uint64_t address,
 	NtReadVirtualMemory64_t NtReadVirtualMemory,
 	uint64_t processHandle)
@@ -29,33 +37,42 @@ uint64_t ProcessImage(
 	std::vector<uint8_t> buffer(0x1000);
 	auto status = X64Syscall(NtReadVirtualMemory, processHandle, address, buffer.data(), buffer.size(), 0);
 	if (!NT_SUCCESS(status))
-		return 0;
+		return { 0, false };
 
 	try
 	{
 		BufferSafeAccessor accessor(buffer);
 		auto dos = accessor.GetPointer<IMAGE_DOS_HEADER>();
 		if (dos->e_magic != 0x5a4d)
-			return 0;
+			return { 0, false };
 
-		auto nt = accessor.Seek(dos->e_lfanew).GetPointer<IMAGE_NT_HEADERS>();
-		if (nt->Signature != 0x4550)
-			return 0;
+		auto signature = accessor.Seek(dos->e_lfanew).GetPointer<uint32_t>();
+		if (*signature != 0x4550)
+			return { 0, false };
 
-		if ((nt->FileHeader.Characteristics & IMAGE_FILE_DLL) != 0)
-			return 0;
+		auto fileHeader = accessor.GetPointer<IMAGE_FILE_HEADER>();
+		if ((fileHeader->Characteristics & IMAGE_FILE_DLL) != 0)
+			return { 0, false };
 
-		return address + nt->OptionalHeader.AddressOfEntryPoint;
+		switch (fileHeader->Machine)
+		{
+		case IMAGE_FILE_MACHINE_I386:
+			return { GetEntryPoint<IMAGE_OPTIONAL_HEADER32>(accessor, address), false };
+		case IMAGE_FILE_MACHINE_AMD64:
+			return { GetEntryPoint<IMAGE_OPTIONAL_HEADER64>(accessor, address), true };
+		default:
+			return { 0, false };
+		}
 	}
 	catch (const std::out_of_range&)
 	{
-		return 0;
+		return { 0, false };
 	}
 }
 
 const uint32_t PAGE_SIZE = 4096;
 
-uintptr_t GetExeEntryPoint(
+std::pair<uint64_t, bool> GetExeEntryPoint(
 	NtQueryVirtualMemory64_t NtQueryVirtualMemory,
 	NtReadVirtualMemory64_t NtReadVirtualMemory,
 	uint64_t processHandle)
@@ -69,29 +86,14 @@ uintptr_t GetExeEntryPoint(
 			continue;
 
 		auto ep = ProcessImage(mbi.AllocationBase, NtReadVirtualMemory, processHandle);
-		if (ep != 0)
-			return (uintptr_t)ep;
+		if (ep.first != 0)
+			return ep;
 	}
 
-	return 0;
+	return { 0, false };
 }
 
-#ifndef _X64_
-static const uint8_t injectedCode[] = {
-	0x68, 0x78, 0x56, 0x34, 0x12, // push 0x12345678
-	0xB8, 0x78, 0x56, 0x34, 0x12, // mov eax, 0x12345678
-	0xFF, 0xD0,                   // call eax
-	0x05, 0x78, 0x56, 0x34, 0x12, // add eax, 0x12345678
-	0xFF, 0xD0,                   // call eax
-	0xC3                          // ret
-};
-
-static const uintptr_t StringAddressOffset = 1;
-static const uintptr_t LoadLibraryAddressOffset = 6;
-static const uintptr_t FuncRVAOffset = 13;
-
-#else
-static const uint8_t injectedCode[] = {
+static const uint8_t injectedCode64[] = {
 	0x48, 0x89, 0xE5,                                           // mov  rbp, rsp
 	0x48, 0x83, 0xE4, 0xF0,                                     // mov  rsp, 0xfffffffffffffff0
 	0x48, 0xB9, 0xEF, 0xCD, 0xAB, 0x90, 0x78, 0x56, 0x34, 0x12, // mov  rcx, 0x1234567890abcdef
@@ -104,21 +106,60 @@ static const uint8_t injectedCode[] = {
 	0xC3                                                        // ret
 };
 
-static const uintptr_t StringAddressOffset = 9;
-static const uintptr_t LoadLibraryAddressOffset = 19;
-static const uintptr_t FuncRVAOffset = 35;
-#endif // _X64_
+static const uint8_t injectedCode32[] = {
+	0x68, 0x78, 0x56, 0x34, 0x12, // push 0x12345678
+	0xB8, 0x78, 0x56, 0x34, 0x12, // mov eax, 0x12345678
+	0xFF, 0xD0,                   // call eax
+	0x05, 0x78, 0x56, 0x34, 0x12, // add eax, 0x12345678
+	0xFF, 0xD0,                   // call eax
+	0xC3                          // ret
+};
 
+template <bool isAMD64>
+struct arch_traits_t
+{
+	static const size_t StringAddressOffset = 9;
+	static const size_t LoadLibraryAddressOffset = 19;
+	static const size_t FuncRVAOffset = 35;
+
+	static constexpr auto GetInjectedCode()
+	{
+		return std::pair<const uint8_t*, size_t>(injectedCode64, sizeof(injectedCode64));
+	}
+
+	typedef uint64_t ptr_t;
+};
+
+template <>
+struct arch_traits_t<false>
+{
+	static const size_t StringAddressOffset = 1;
+	static const size_t LoadLibraryAddressOffset = 6;
+	static const size_t FuncRVAOffset = 13;
+
+	static constexpr auto GetInjectedCode()
+	{
+		return std::pair<const uint8_t*, size_t>(injectedCode64, sizeof(injectedCode64));
+	}
+
+	typedef uint32_t ptr_t;
+};
+
+template <bool isAMD64>
 std::vector<uint8_t> GetCodeBuffer(const std::string& dllPath, const std::string& funcName, uintptr_t ep)
 {
-	uintptr_t stringSizeInBytes = dllPath.length() + 1;
-	std::vector<uint8_t> epNewBytes(sizeof(injectedCode) + stringSizeInBytes);
-	memcpy(epNewBytes.data(), injectedCode, sizeof(injectedCode));
-	memcpy(epNewBytes.data() + sizeof(injectedCode), dllPath.c_str(), stringSizeInBytes);
+	typedef typename arch_traits_t<isAMD64>::ptr_t ptr_t;
 
-	*(uintptr_t*)(epNewBytes.data() + StringAddressOffset) = ep + sizeof(injectedCode);
-	auto funcPtr = (uintptr_t)GetProcAddress(GetModuleHandleA("kernelbase"), "LoadLibraryA");
-	*(uintptr_t*)(epNewBytes.data() + LoadLibraryAddressOffset) = funcPtr;
+	size_t stringSizeInBytes = dllPath.length() + 1;
+	auto [codeBuffer, codeSize] = arch_traits_t<isAMD64>::GetInjectedCode();
+
+	std::vector<uint8_t> epNewBytes(codeSize + stringSizeInBytes);
+	memcpy(epNewBytes.data(), codeBuffer, codeSize);
+	memcpy(epNewBytes.data() + codeSize, dllPath.c_str(), stringSizeInBytes);
+
+	*(ptr_t*)(epNewBytes.data() + arch_traits_t<isAMD64>::StringAddressOffset) = ep + codeSize;
+	auto funcPtr = (ptr_t)GetProcAddress(GetModuleHandleA("kernelbase"), "LoadLibraryA"); // FIXME
+	*(ptr_t*)(epNewBytes.data() + arch_traits_t<isAMD64>::LoadLibraryAddressOffset) = funcPtr;
 
 	auto hModule = LoadLibraryA(dllPath.c_str());
 	if (hModule == nullptr)
@@ -129,8 +170,10 @@ std::vector<uint8_t> GetCodeBuffer(const std::string& dllPath, const std::string
 	if (funcToRun == nullptr)
 		throw std::logic_error(dllPath + "!" + funcName + " does not exist");
 
-	*(uint32_t*)(epNewBytes.data() + FuncRVAOffset) = (uint32_t)((uintptr_t)funcToRun - (uintptr_t)hModule);
+	*(uint32_t*)(epNewBytes.data() + arch_traits_t<isAMD64>::FuncRVAOffset) = (uint32_t)((uintptr_t)funcToRun - (uintptr_t)hModule);
 
 	return epNewBytes;
 }
 
+template std::vector<uint8_t> GetCodeBuffer<false>(const std::string& dllPath, const std::string& funcName, uintptr_t ep);
+template std::vector<uint8_t> GetCodeBuffer<true>(const std::string& dllPath, const std::string& funcName, uintptr_t ep);
