@@ -2,23 +2,8 @@
 #include <cstdio>
 #include <exception>
 
-#include <windows.h>
-
 #include "parser.hpp"
 #include "util.hpp"
-
-typedef enum _MEMORY_INFORMATION_CLASS {
-	MemoryBasicInformation
-} MEMORY_INFORMATION_CLASS;
-
-typedef NTSTATUS (NTAPI *NtQueryVirtualMemory64_t)(
-	uint64_t ProcessHandle,
-	uint64_t BaseAddress,
-	uint64_t MemoryInformationClass,
-	uint64_t MemoryInformation,
-	uint64_t MemoryInformationLength,
-	uint64_t ReturnLength
-);
 
 int main()
 {

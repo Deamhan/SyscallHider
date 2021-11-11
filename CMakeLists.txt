@@ -10,6 +10,7 @@ set(NTDLL64LL ${PROJECT_SOURCE_DIR}/lib/ntdll64ll.obj)
 set(HIDER_COMMON source/parser.cpp)
 
 add_executable(injector ${HIDER_COMMON}
+                        source/cmdline.cpp
                         source/inject.cpp
                         source/util.cpp)
 
