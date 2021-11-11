@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
+#include <vector>
 #include <Windows.h>
 
 #undef max
@@ -73,14 +75,16 @@ typedef NTSTATUS(NTAPI* NtQueryVirtualMemory64_t)(
 	uint64_t MemoryInformationLength,
 	uint64_t ReturnLength);
 
-bool EnableVTMode() noexcept;
+void EnableVTMode();
 
 uint64_t ProcessImage(
 	uint64_t address,
 	NtReadVirtualMemory64_t NtReadVirtualMemory,
 	uint64_t processHandle);
 
-uint64_t GetExeEntryPoint(
+uintptr_t GetExeEntryPoint(
 	NtQueryVirtualMemory64_t NtQueryVirtualMemory,
 	NtReadVirtualMemory64_t NtReadVirtualMemory,
 	uint64_t processHandle);
+
+std::vector<uint8_t> GetCodeBuffer(const std::string& dllPath, const std::string& funcName, uintptr_t ep);

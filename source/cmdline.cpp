@@ -8,12 +8,12 @@ void ParseCmdLine(const std::vector<CmdLineOption>& opts, int argc, const char**
 	for (size_t i = 1; i < argc; ++i)
 	{
 		const std::string arg(argv[i]);
-		if (arg.compare(0, 1, "-"))
+		if (arg.compare(0, 1, "-") == 0)
 		{
 			if (selectedOpt != nullptr)
-				throw std::logic_error(std::string("option redifinition if not allowed: ").append(selectedOpt->longNotation).append(" to ").append(arg));
+				throw std::logic_error(std::string("option hasn't been set: ").append(selectedOpt->longNotation));
 
-			if (arg.compare(0, 2, "--"))
+			if (arg.compare(0, 2, "--") == 0)
 			{
 				for (auto& opt : opts)
 				{
@@ -24,11 +24,11 @@ void ParseCmdLine(const std::vector<CmdLineOption>& opts, int argc, const char**
 					}
 				}
 			}
-			else if (arg.length() == 3)
+			else if (arg.length() == 2)
 			{
 				for (auto& opt : opts)
 				{
-					if (arg[2] == opt.shortNotation)
+					if (arg[1] == opt.shortNotation)
 					{
 						selectedOpt = &opt;
 						break;
@@ -39,18 +39,23 @@ void ParseCmdLine(const std::vector<CmdLineOption>& opts, int argc, const char**
 			if (selectedOpt == nullptr)
 				throw std::logic_error(std::string("unknown cmd line option: ").append(arg));
 
-			if (selectedOpt == nullptr)
-				throw std::logic_error(std::string("option hasn't been selected before \'").append(arg).append("\'"));
+			if (selectedOpt->outValue.second)
+				throw std::logic_error(std::string("option redifinition if not allowed: ").append(selectedOpt->longNotation));
 
-			selectedOpt->outValue.first = arg;
-			selectedOpt->outValue.second = true;
-			selectedOpt = nullptr;
+			continue;
 		}
+
+	    if (selectedOpt == nullptr)
+	    	throw std::logic_error(std::string("option hasn't been selected before \'").append(arg).append("\'"));
+	    
+	    selectedOpt->outValue.first = arg;
+	    selectedOpt->outValue.second = true;
+	    selectedOpt = nullptr;
 	}
 
 	for (auto& opt : opts)
 	{
-		if (opt.outValue.second)
+		if (!opt.outValue.second)
 		{
 			if (opt.isMandatory)
 				throw std::logic_error(std::string("mandatory option is not provided: ").append(opt.longNotation));

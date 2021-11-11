@@ -17,6 +17,16 @@ add_executable(injector ${HIDER_COMMON}
 add_executable(test ${HIDER_COMMON}
                     source/test.cpp
                     source/util.cpp)
+					
+add_library(payload SHARED source/dllmain.cpp)
+
+set(REQUIRES_ASM injector
+                 test
+)
+
+foreach (TGT ${REQUIRES_ASM})
+	add_custom_command(TARGET ${TGT} PRE_BUILD COMMAND cmd /c ${PROJECT_SOURCE_DIR}\\asm.bat)
+endforeach()
                                      
 if (CMAKE_SIZEOF_VOID_P EQUAL 8)
     add_definitions(-D_X64_=1)

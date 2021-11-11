@@ -5,16 +5,17 @@
 #include "parser.hpp"
 #include "util.hpp"
 
+static const char* coloredErrorPattern = "\x1b[91mError: %s\n\x1b[m";
+static const char* simpleErrorPattern = "Error: %s\n";
+
 int main()
 {
-	if (!EnableVTMode())
-	{
-		printf("Unable to prepare terminal\n");
-		return 1;
-	}
+	const char* errPattern = simpleErrorPattern;
 
 	try
 	{
+		EnableVTMode();
+		errPattern = coloredErrorPattern;
 		auto ntdll = ParseNtdll();
 
 		auto NtQueryVirtualMemory64 = GET_SYSCALL_PTR(ntdll, NtQueryVirtualMemory);
@@ -36,7 +37,7 @@ int main()
 	}
 	catch (const std::exception& ex)
 	{
-		printf("\x1b[91mError: %s\n\x1b[m", ex.what());
+		printf(errPattern, ex.what());
 		return 2;
 	}
 

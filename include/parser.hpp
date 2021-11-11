@@ -28,8 +28,7 @@ template <class Func, class... Args>
 NTSTATUS X64Syscall(Func func, Args... args)
 {
 #if _X64_
-	typedef NTSTATUS(NTAPI* Func_t)(Args...);
-	return ((Func_t)func)(args...);
+	return func((uint64_t)args...);
 #else
 	return X64Function((uint64_t)func, sizeof...(args), (uint64_t)args...);
 #endif // _X64_
@@ -39,7 +38,20 @@ NTSTATUS X64Syscall(Func func, Args... args)
 #define NT_SUCCESS(status) ((int)(status) >= 0)
 #endif // NT_SUCCESS
 
-#define GET_SYSCALL_PTR(dll, Name) (Name##64_t)(dll.first.get() + dll.second[#Name])
+template <class Func>
+inline Func GetSyscallPtr(const exec_ptr_t& blob, const syscall_map& dict, const char * name)
+{
+	try
+	{
+		return (Func)(blob.get() + dict.at(name));
+	}
+	catch (const std::out_of_range&)
+	{
+		throw std::exception(std::string("unable to locate function: ").append(name).c_str());
+	}
+}
+
+#define GET_SYSCALL_PTR(dll, name) GetSyscallPtr<name##64_t>(dll.first, dll.second, #name)
 
 class BufferSafeAccessor
 {
