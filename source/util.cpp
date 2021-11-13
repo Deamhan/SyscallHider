@@ -177,12 +177,12 @@ static const uint8_t injectedCode64[] = {
 };
 
 static const uint8_t injectedCode32[] = {
+	0xBB, 0x78, 0x56, 0x34, 0x12, // mov  ebx, 0x12345678 (PHMODULE)
+    0x53,                         // push ebx 
+	0x68, 0x78, 0x56, 0x34, 0x12, // push 0x12345678      (PUNICODE_STRING)
 	0x31, 0xC0,                   // xor  eax, eax
 	0x50,                         // push eax
-	0x50,                         // push eax
-	0x68, 0x78, 0x56, 0x34, 0x12, // push 0x12345678      (PUNICODE_STRING)
-	0xBB, 0x78, 0x56, 0x34, 0x12, // mov  ebx, 0x12345678 (PHMODULE)
-	0x53,                         // push ebx     
+	0x50,                         // push eax    
 	0xB8, 0x78, 0x56, 0x34, 0x12, // mov  eax, 0x12345678 (pLdrLoadDll)
 	0xFF, 0xD0,                   // call eax
 	0x8B, 0x03,                   // mov  eax, [ebx]
@@ -227,14 +227,14 @@ struct arch_traits_t
 template <>
 struct arch_traits_t<false>
 {
-	static const size_t unicodeStringOffset = 5;
-	static const size_t hmodudeOffset = 10;
+	static const size_t unicodeStringOffset = 7;
+	static const size_t hmodudeOffset = 1;
 	static const size_t ldrLoadDllOffset = 16;
 	static const size_t exportedFuncRVAOffset = 25;
 
 	static constexpr auto GetInjectedCode()
 	{
-		return std::pair<const uint8_t*, size_t>(injectedCode64, sizeof(injectedCode64));
+		return std::pair<const uint8_t*, size_t>(injectedCode32, sizeof(injectedCode32));
 	}
 
 	typedef uint32_t ptr_t;
@@ -242,7 +242,7 @@ struct arch_traits_t<false>
 };
 
 template <bool isAMD64>
-std::vector<uint8_t> GetCodeBuffer(const std::string& dllPath, const std::string& funcName, uintptr_t ep, uint64_t pLdrLoadDll)
+std::vector<uint8_t> GetCodeBuffer(const std::string& dllPath, const std::string& funcName, uint64_t ep, uint64_t pLdrLoadDll)
 {
 	typedef typename arch_traits_t<isAMD64>::ptr_t ptr_t;
 	typedef typename arch_traits_t<isAMD64>::unicode_str_t unicode_str_t;
@@ -288,5 +288,5 @@ std::vector<uint8_t> GetCodeBuffer(const std::string& dllPath, const std::string
 	return epNewBytes;
 }
 
-template std::vector<uint8_t> GetCodeBuffer<false>(const std::string& dllPath, const std::string& funcName, uintptr_t ep, uint64_t pLdrLoadDll);
-template std::vector<uint8_t> GetCodeBuffer<true>(const std::string& dllPath, const std::string& funcName, uintptr_t ep, uint64_t pLdrLoadDll);
+template std::vector<uint8_t> GetCodeBuffer<false>(const std::string& dllPath, const std::string& funcName, uint64_t ep, uint64_t pLdrLoadDll);
+template std::vector<uint8_t> GetCodeBuffer<true>(const std::string& dllPath, const std::string& funcName, uint64_t ep, uint64_t pLdrLoadDll);
