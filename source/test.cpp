@@ -2,7 +2,6 @@
 #include <cstdio>
 #include <exception>
 
-#include "parser.hpp"
 #include "util.hpp"
 
 static const char* coloredErrorPattern = "\x1b[91mError: %s\n\x1b[m";

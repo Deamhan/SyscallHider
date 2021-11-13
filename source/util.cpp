@@ -177,6 +177,7 @@ static const uint8_t injectedCode64[] = {
 };
 
 static const uint8_t injectedCode32[] = {
+	0x89, 0xE5,                   // mov  ebp, esp
 	0xBB, 0x78, 0x56, 0x34, 0x12, // mov  ebx, 0x12345678 (PHMODULE)
     0x53,                         // push ebx 
 	0x68, 0x78, 0x56, 0x34, 0x12, // push 0x12345678      (PUNICODE_STRING)
@@ -188,6 +189,7 @@ static const uint8_t injectedCode32[] = {
 	0x8B, 0x03,                   // mov  eax, [ebx]
 	0x05, 0x78, 0x56, 0x34, 0x12, // add  eax, 0x12345678 (Exported function RVA)
 	0xFF, 0xD0,                   // call eax
+	0x89, 0xEC,                   // mov  esp, ebp
 	0xC3                          // ret
 };
 
@@ -227,10 +229,10 @@ struct arch_traits_t
 template <>
 struct arch_traits_t<false>
 {
-	static const size_t unicodeStringOffset = 7;
-	static const size_t hmodudeOffset = 1;
-	static const size_t ldrLoadDllOffset = 16;
-	static const size_t exportedFuncRVAOffset = 25;
+	static const size_t unicodeStringOffset = 9;
+	static const size_t hmodudeOffset = 3;
+	static const size_t ldrLoadDllOffset = 18;
+	static const size_t exportedFuncRVAOffset = 27;
 
 	static constexpr auto GetInjectedCode()
 	{
@@ -295,3 +297,5 @@ std::vector<uint8_t> GetCodeBuffer(bool isAMD64, const std::string& dllPath, con
 
 	return GetCodeBuffer<false>(dllPath, funcName, ep, pLdrLoadDll);
 }
+
+RtlNtStatusToDosError_t RtlNtStatusToDosError = (RtlNtStatusToDosError_t)GetProcAddress(GetModuleHandleA("ntdll"), "RtlNtStatusToDosError");

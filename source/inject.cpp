@@ -6,7 +6,6 @@
 #include <utility>
 
 #include "cmdline.hpp"
-#include "parser.hpp"
 #include "util.hpp"
 
 static CmdLineOptionValue gExec = {}, gDll = {}, gFunc = {};
@@ -59,8 +58,8 @@ int main(int argc, const char** argv)
 		uint64_t addressToVProt = ep;
 		uint64_t sizeToVProt = epNewBytes.size();
 		uint64_t oldVProt = 0;
-		auto status = X64Syscall(NtProtectVirtualMemory64, pi.hProcess, &addressToVProt, &sizeToVProt, PAGE_EXECUTE_READWRITE, &oldVProt);
-		status = X64Syscall(NtWriteVirtualMemory64, pi.hProcess, ep, epNewBytes.data(), epNewBytes.size(), 0);
+		CheckStatus(X64Syscall(NtProtectVirtualMemory64, pi.hProcess, &addressToVProt, &sizeToVProt, PAGE_EXECUTE_READWRITE, &oldVProt), pi.hProcess);
+		CheckStatus(X64Syscall(NtWriteVirtualMemory64, pi.hProcess, ep, epNewBytes.data(), epNewBytes.size(), 0), pi.hProcess);
 
 		ResumeThread(pi.hThread);
 	}
