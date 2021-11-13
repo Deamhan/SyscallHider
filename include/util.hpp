@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <tuple>
 #include <vector>
 #include <Windows.h>
 
@@ -77,15 +78,10 @@ typedef NTSTATUS(NTAPI* NtQueryVirtualMemory64_t)(
 
 void EnableVTMode();
 
-std::pair<uint64_t, bool> ProcessImage(
-	uint64_t address,
-	NtReadVirtualMemory64_t NtReadVirtualMemory,
-	uint64_t processHandle);
-
-std::pair<uint64_t, bool> GetExeEntryPoint(
+std::tuple<uint64_t, uint64_t, bool> GetProcessInfo(
 	NtQueryVirtualMemory64_t NtQueryVirtualMemory,
 	NtReadVirtualMemory64_t NtReadVirtualMemory,
 	uint64_t processHandle);
 
 template <bool isAMD64>
-std::vector<uint8_t> GetCodeBuffer(const std::string& dllPath, const std::string& funcName, uintptr_t ep);
+std::vector<uint8_t> GetCodeBuffer(const std::string& dllPath, const std::string& funcName, uint64_t ep, uint64_t pLdrLoadDll);

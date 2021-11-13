@@ -53,8 +53,8 @@ int main(int argc, const char** argv)
 				CloseHandle(pi->hThread);
 			});
 
-		auto [ep, isAMD64] = GetExeEntryPoint(NtQueryVirtualMemory64, NtReadVirtualMemory64, (uint64_t)pi.hProcess);
-		auto epNewBytes = isAMD64 ? GetCodeBuffer<true>(gDll.first, gFunc.first, ep) : GetCodeBuffer<false>(gDll.first, gFunc.first, ep);
+		auto [ep, pLdrLoadDll, isAMD64] = GetProcessInfo(NtQueryVirtualMemory64, NtReadVirtualMemory64, (uint64_t)pi.hProcess);
+		auto epNewBytes = isAMD64 ? GetCodeBuffer<true>(gDll.first, gFunc.first, ep, pLdrLoadDll) : GetCodeBuffer<false>(gDll.first, gFunc.first, ep, pLdrLoadDll);
 
 		uint64_t addressToVProt = ep;
 		uint64_t sizeToVProt = epNewBytes.size();

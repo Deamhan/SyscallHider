@@ -96,3 +96,39 @@ public:
 		return *this;
 	}
 };
+
+namespace fs = std::filesystem;
+
+class IFilter
+{
+	virtual bool Filter(std::string_view) = 0;
+public:
+    bool operator()(std::string_view name) { return Filter(name); }
+};
+
+template <bool isMappedImage>
+syscall_map ParseDllExport(BufferSafeAccessor buffer, IFilter& filter, bool getExportByRVA);
+
+template <bool isMappedImage>
+syscall_map ParseDllExport(const fs::path& path, IFilter& filter, bool getExportByRVA);
+
+fs::path GetDllPath(std::string_view name, bool isWOW64);
+
+class Wow64RedirectionDisabler
+{
+#ifndef _X64_
+	PVOID mOldValue;
+	BOOL  mOk;
+public:
+	Wow64RedirectionDisabler() noexcept
+	{
+		mOk = Wow64DisableWow64FsRedirection(&mOldValue);
+	}
+
+	~Wow64RedirectionDisabler()
+	{
+		if (mOk)
+			Wow64RevertWow64FsRedirection(mOldValue);
+	}
+#endif
+};
