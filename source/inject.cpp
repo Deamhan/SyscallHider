@@ -54,7 +54,7 @@ int main(int argc, const char** argv)
 			});
 
 		auto [ep, pLdrLoadDll, isAMD64] = GetProcessInfo(NtQueryVirtualMemory64, NtReadVirtualMemory64, (uint64_t)pi.hProcess);
-		auto epNewBytes = isAMD64 ? GetCodeBuffer<true>(gDll.first, gFunc.first, ep, pLdrLoadDll) : GetCodeBuffer<false>(gDll.first, gFunc.first, ep, pLdrLoadDll);
+		auto epNewBytes = GetCodeBuffer(isAMD64, gDll.first, gFunc.first, ep, pLdrLoadDll);
 
 		uint64_t addressToVProt = ep;
 		uint64_t sizeToVProt = epNewBytes.size();

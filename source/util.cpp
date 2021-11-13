@@ -242,7 +242,7 @@ struct arch_traits_t<false>
 };
 
 template <bool isAMD64>
-std::vector<uint8_t> GetCodeBuffer(const std::string& dllPath, const std::string& funcName, uint64_t ep, uint64_t pLdrLoadDll)
+static std::vector<uint8_t> GetCodeBuffer(const std::string& dllPath, const std::string& funcName, uint64_t ep, uint64_t pLdrLoadDll)
 {
 	typedef typename arch_traits_t<isAMD64>::ptr_t ptr_t;
 	typedef typename arch_traits_t<isAMD64>::unicode_str_t unicode_str_t;
@@ -288,5 +288,10 @@ std::vector<uint8_t> GetCodeBuffer(const std::string& dllPath, const std::string
 	return epNewBytes;
 }
 
-template std::vector<uint8_t> GetCodeBuffer<false>(const std::string& dllPath, const std::string& funcName, uint64_t ep, uint64_t pLdrLoadDll);
-template std::vector<uint8_t> GetCodeBuffer<true>(const std::string& dllPath, const std::string& funcName, uint64_t ep, uint64_t pLdrLoadDll);
+std::vector<uint8_t> GetCodeBuffer(bool isAMD64, const std::string& dllPath, const std::string& funcName, uint64_t ep, uint64_t pLdrLoadDll)
+{
+	if (isAMD64)
+		return GetCodeBuffer<true>(dllPath, funcName, ep, pLdrLoadDll);
+
+	return GetCodeBuffer<false>(dllPath, funcName, ep, pLdrLoadDll);
+}

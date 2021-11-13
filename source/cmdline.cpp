@@ -1,6 +1,26 @@
 #include "cmdline.hpp"
 
+#include <algorithm>
+#include <cstdio>
+#include <numeric>
 #include <stdexcept>
+
+static void ShowHelp(const std::vector<CmdLineOption>& opts)
+{
+	printf("Help:\n");
+	unsigned maxLen = std::accumulate(opts.begin(), opts.end(), 0u, [](unsigned value, const CmdLineOption& opt) 
+		{ 
+			return std::max<unsigned>(value, opt.longNotation.length()); 
+		});
+
+	for (const auto& opt : opts)
+	{
+		printf("\t-%c | --%-*s : %s, default value is \'%s\'\n", opt.shortNotation, maxLen, opt.longNotation.c_str(),
+			opt.description.c_str(), opt.defaultValue.c_str());
+	}
+
+	printf("\n");
+}
 
 void ParseCmdLine(const std::vector<CmdLineOption>& opts, int argc, const char** argv)
 {
@@ -58,7 +78,10 @@ void ParseCmdLine(const std::vector<CmdLineOption>& opts, int argc, const char**
 		if (!opt.outValue.second)
 		{
 			if (opt.isMandatory)
+			{
+				ShowHelp(opts);
 				throw std::logic_error(std::string("mandatory option is not provided: ").append(opt.longNotation));
+			}
 
 			opt.outValue.first = opt.defaultValue;
 		}

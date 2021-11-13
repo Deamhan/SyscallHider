@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdexcept>
 #include <string>
 #include <vector>
 #include <utility>
@@ -9,9 +10,9 @@ typedef std::pair<std::string, bool> CmdLineOptionValue;
 struct CmdLineOption
 {
 	char shortNotation;
-	std::string_view longNotation;
-	std::string_view description;
-	std::string_view defaultValue;
+	std::string longNotation;
+	std::string description;
+	std::string defaultValue;
 	bool isMandatory;
 	CmdLineOptionValue& outValue;
 };
