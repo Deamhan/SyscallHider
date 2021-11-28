@@ -107,22 +107,30 @@ static void ParseDllExportArchSpecific(BufferSafeAccessor& buffer, const IMAGE_F
 	}
 }
 
+const IMAGE_FILE_HEADER* GetFileHeader(BufferSafeAccessor& buffer)
+{
+	auto pDosHeader = buffer.GetPointer<IMAGE_DOS_HEADER>();
+	if (pDosHeader->e_magic != 0x5a4d)
+		throw std::logic_error("invalid PE file");
+
+	auto signature = *(buffer.Seek(pDosHeader->e_lfanew).GetPointer<uint32_t>());
+	if (signature != 0x4550)
+		throw std::logic_error("invalid PE file");
+
+	return buffer.GetPointer<IMAGE_FILE_HEADER>();
+}
+
 template <bool isMappedImage>
-syscall_map ParseDllExport(BufferSafeAccessor buffer, IFilter& filter, bool getExportByRVA)
+syscall_map ParseDllExport(BufferSafeAccessor buffer, IFilter& filter, bool getExportByRVA, CPUArch expectedArch)
 {
 	syscall_map result;
 
 	try
 	{
-		auto pDosHeader = buffer.GetPointer<IMAGE_DOS_HEADER>();
-		if (pDosHeader->e_magic != 0x5a4d)
-			throw std::logic_error("invalid PE file");
+		auto pFileHeader = GetFileHeader(buffer);
+		if (expectedArch != CPUArch::Unknown && pFileHeader->Machine != (WORD)expectedArch)
+			throw std::logic_error("Wrong architecture");
 
-		auto signature = *(buffer.Seek(pDosHeader->e_lfanew).GetPointer<uint32_t>());
-		if (signature != 0x4550)
-			throw std::logic_error("invalid PE file");
-
-		auto pFileHeader = buffer.GetPointer<IMAGE_FILE_HEADER>();
 		switch (pFileHeader->Machine)
 		{
 		case IMAGE_FILE_MACHINE_I386:
@@ -143,8 +151,8 @@ syscall_map ParseDllExport(BufferSafeAccessor buffer, IFilter& filter, bool getE
 	return result;
 }
 
-template syscall_map ParseDllExport<true>(BufferSafeAccessor buffer, IFilter& filter, bool getExportByRVA);
-template syscall_map ParseDllExport<false>(BufferSafeAccessor buffer, IFilter& filter, bool getExportByRVA);
+template syscall_map ParseDllExport<true>(BufferSafeAccessor buffer, IFilter& filter, bool getExportByRVA, CPUArch expectedArch);
+template syscall_map ParseDllExport<false>(BufferSafeAccessor buffer, IFilter& filter, bool getExportByRVA, CPUArch expectedArch);
 
 const uint32_t PAGE_SIZE = 4096;
 
@@ -187,20 +195,20 @@ std::pair<exec_ptr_t, syscall_map> ParseNtdll()
 			return (name.compare(0, 2, "Nt") == 0);
 		}
 	} filter;
-	auto functions = ParseDllExport<false>(buffer, filter, false);
+	auto functions = ParseDllExport<false>(buffer, filter, false, CPUArch::X64);
 	return { GetNtdllCode(functions, buffer), functions };
 }
 
 template <bool isMappedImage>
-syscall_map ParseDllExport(const fs::path& path, IFilter& filter, bool getExportByRVA)
+syscall_map ParseDllExport(const fs::path& path, IFilter& filter, bool getExportByRVA, CPUArch expectedArch)
 {
 	syscall_map result;
 	std::vector<uint8_t> buffer;
 	if (!ReadDll(path, buffer))
 		return result;
 
-	return ParseDllExport<isMappedImage>(buffer, filter, getExportByRVA);
+	return ParseDllExport<isMappedImage>(buffer, filter, getExportByRVA, expectedArch);
 }
 
-template syscall_map ParseDllExport<true>(const fs::path& path, IFilter& filter, bool getExportByRVA);
-template syscall_map ParseDllExport<false>(const fs::path& path, IFilter& filter, bool getExportByRVA);
+template syscall_map ParseDllExport<true>(const fs::path& path, IFilter& filter, bool getExportByRVA, CPUArch expectedArch);
+template syscall_map ParseDllExport<false>(const fs::path& path, IFilter& filter, bool getExportByRVA, CPUArch expectedArch);

@@ -88,7 +88,7 @@ static std::tuple<uint64_t, bool, bool> ProcessImage(
 					return (name == "LdrLoadDll");
 				}
 			} filter;
-			auto exports = ParseDllExport<true>(buffer, filter, true);
+			auto exports = ParseDllExport<true>(buffer, filter, true, CPUArch::Unknown);
 			if (exports.empty())
 				return { 0, isAMD64, true };
 
@@ -281,7 +281,7 @@ static std::vector<uint8_t> GetCodeBuffer(const std::string& dllPath, const std:
 			return (name == "Handler");
 		}
 	} filter;
-	auto exports = ParseDllExport<false>(dllPath, filter, true);
+	auto exports = ParseDllExport<false>(dllPath, filter, true, isAMD64 ? CPUArch::X64 : CPUArch::X86);
 	if (exports.empty())
 		throw std::logic_error(dllPath + "!" + funcName + " does not exist");
 

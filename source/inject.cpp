@@ -23,11 +23,26 @@ static const char* simpleErrorPattern = "Error: %s\n";
 int main(int argc, const char** argv)
 {
 	const char* errPattern = simpleErrorPattern;
+	PROCESS_INFORMATION pi = {};
+	std::unique_ptr<PROCESS_INFORMATION, void(*)(PROCESS_INFORMATION*)> processInfoGuard(&pi, [](PROCESS_INFORMATION* pi)
+		{
+			CloseHandle(pi->hProcess);
+			CloseHandle(pi->hThread);
+		});
+
 	try
 	{
 		EnableVTMode();
 		errPattern = coloredErrorPattern;
 		ParseCmdLine(gCmdLineOptions, argc, argv);
+
+		STARTUPINFOA sa = { sizeof(sa) };
+		
+		std::unique_ptr<char[], void(*)(void*)> pathCopy(strdup(gExec.first.c_str()), free);
+		auto res = CreateProcessA(nullptr, pathCopy.get(), nullptr, nullptr, FALSE, CREATE_SUSPENDED, nullptr, nullptr, &sa, &pi);
+		if (!res)
+			throw std::system_error(GetLastError(), std::system_category(),
+				std::string("unable to run target process \'").append(pathCopy.get()).append("\'"));
 
 		auto ntdll = ParseNtdll();
 		auto NtSetInformationThread64 = GET_SYSCALL_PTR(ntdll, NtSetInformationThread);
@@ -37,20 +52,6 @@ int main(int argc, const char** argv)
 		auto NtReadVirtualMemory64 = GET_SYSCALL_PTR(ntdll, NtReadVirtualMemory);
 		auto NtQueryVirtualMemory64 = GET_SYSCALL_PTR(ntdll, NtQueryVirtualMemory);
 		auto NtProtectVirtualMemory64 = GET_SYSCALL_PTR(ntdll, NtProtectVirtualMemory);
-
-		STARTUPINFOA sa = { sizeof(sa) };
-		PROCESS_INFORMATION pi = {};
-		std::unique_ptr<char[], void(*)(void*)> pathCopy(strdup(gExec.first.c_str()), free);
-		auto res = CreateProcessA(nullptr, pathCopy.get(), nullptr, nullptr, FALSE, CREATE_SUSPENDED, nullptr, nullptr, &sa, &pi);
-		if (!res)
-			throw std::system_error(GetLastError(), std::system_category(),
-				std::string("unable to run target process \'").append(pathCopy.get()).append("\'"));
-
-		std::unique_ptr<PROCESS_INFORMATION, void(*)(PROCESS_INFORMATION*)> processInfoGuard(&pi, [](PROCESS_INFORMATION* pi) 
-			{
-				CloseHandle(pi->hProcess);
-				CloseHandle(pi->hThread);
-			});
 
 		auto [ep, pLdrLoadDll, isAMD64] = GetProcessInfo(NtQueryVirtualMemory64, NtReadVirtualMemory64, (uint64_t)pi.hProcess);
 		auto epNewBytes = GetCodeBuffer(isAMD64, gDll.first, gFunc.first, ep, pLdrLoadDll);
@@ -65,6 +66,9 @@ int main(int argc, const char** argv)
 	}
 	catch (const std::exception& ex)
 	{
+		if (pi.hProcess != nullptr)
+			TerminateProcess(pi.hProcess, 0);
+
 		printf(errPattern, ex.what());
 		return 1;
 	}

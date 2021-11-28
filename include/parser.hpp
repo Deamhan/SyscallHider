@@ -106,11 +106,18 @@ public:
     bool operator()(std::string_view name) { return Filter(name); }
 };
 
-template <bool isMappedImage>
-syscall_map ParseDllExport(BufferSafeAccessor buffer, IFilter& filter, bool getExportByRVA);
+enum class CPUArch
+{
+	Unknown = 0,
+	X86 = IMAGE_FILE_MACHINE_I386,
+	X64 = IMAGE_FILE_MACHINE_AMD64
+};
 
 template <bool isMappedImage>
-syscall_map ParseDllExport(const fs::path& path, IFilter& filter, bool getExportByRVA);
+syscall_map ParseDllExport(BufferSafeAccessor buffer, IFilter& filter, bool getExportByRVA, CPUArch expectedArch);
+
+template <bool isMappedImage>
+syscall_map ParseDllExport(const fs::path& path, IFilter& filter, bool getExportByRVA, CPUArch expectedArch);
 
 fs::path GetDllPath(std::string_view name, bool isWOW64);
 
