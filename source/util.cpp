@@ -318,5 +318,3 @@ std::vector<uint8_t> GetCodeBuffer(bool isAMD64, const std::string& dllPath, con
 
 	return GetCodeBuffer<false>(dllPath, funcName, ep, pLdrLoadDll);
 }
-
-RtlNtStatusToDosError_t RtlNtStatusToDosError = (RtlNtStatusToDosError_t)GetProcAddress(GetModuleHandleA("ntdll"), "RtlNtStatusToDosError");

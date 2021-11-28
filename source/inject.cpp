@@ -59,6 +59,17 @@ int main(int argc, const char** argv)
 		uint64_t addressToVProt = ep;
 		uint64_t sizeToVProt = epNewBytes.size();
 		uint64_t oldVProt = 0;
+
+		typedef ULONG(NTAPI* RtlNtStatusToDosError_t)(NTSTATUS Status);
+		auto RtlNtStatusToDosError = (RtlNtStatusToDosError_t)GetProcAddress(GetModuleHandleA("ntdll"), "RtlNtStatusToDosError");
+		auto CheckStatus = [RtlNtStatusToDosError](NTSTATUS Status, HANDLE hProc)
+		{
+			if (NT_SUCCESS(Status))
+				return;
+
+			throw std::system_error(RtlNtStatusToDosError(Status), std::generic_category(), "ntapi call failed");
+		};
+
 		CheckStatus(X64Syscall(NtProtectVirtualMemory64, pi.hProcess, &addressToVProt, &sizeToVProt, PAGE_EXECUTE_READWRITE, &oldVProt), pi.hProcess);
 		CheckStatus(X64Syscall(NtWriteVirtualMemory64, pi.hProcess, ep, epNewBytes.data(), epNewBytes.size(), 0), pi.hProcess);
 

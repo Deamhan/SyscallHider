@@ -87,15 +87,3 @@ std::tuple<uint64_t, uint64_t, bool> GetProcessInfo(
 	uint64_t processHandle);
 
 std::vector<uint8_t> GetCodeBuffer(bool isAMD64, const std::string& dllPath, const std::string& funcName, uint64_t ep, uint64_t pLdrLoadDll);
-
-typedef ULONG(NTAPI* RtlNtStatusToDosError_t)(NTSTATUS Status);
-extern RtlNtStatusToDosError_t RtlNtStatusToDosError;
-
-inline void CheckStatus(NTSTATUS Status, HANDLE hProc)
-{
-	if (NT_SUCCESS(Status))
-		return;
-
-	TerminateProcess(hProc, 0);
-	throw std::system_error(RtlNtStatusToDosError(Status), std::generic_category(), "ntapi call failed");
-}
