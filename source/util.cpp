@@ -170,7 +170,11 @@ static const uint8_t injectedCode64[] = {
 	0x48, 0xB8, 0xEF, 0xCD, 0xAB, 0x90, 0x78, 0x56, 0x34, 0x12, // mov  rax, 0x1234567890abcdef (pLdrLoadDll)
 	0xFF, 0xD0,                                                 // call rax
 	0x48, 0x8B, 0x03,                                           // mov  rax, [rbx]
-	0x48, 0x05, 0x78, 0x56, 0x34, 0x12,                         // add  rax, 0x12345678         (Exported function RVA)
+	0x48, 0x05, 0x78, 0x56, 0x34, 0x12,                         // add  rax, 0x12345678         (Arg RVA)
+	0xFF, 0xD0,                                                 // call rax
+	0x48, 0x89, 0xC1,                                           // mov  rcx, rax
+	0x48, 0x8B, 0x03,                                           // mov  rax, [rbx]
+	0x48, 0x05, 0x78, 0x56, 0x34, 0x12,                         // add  rax, 0x12345678         (Handler RVA)
 	0xFF, 0xD0,                                                 // call rax
 	0x48, 0x89, 0xEC,                                           // mov  rsp, rbp
 	0xC3                                                        // ret
@@ -187,7 +191,11 @@ static const uint8_t injectedCode32[] = {
 	0xB8, 0x78, 0x56, 0x34, 0x12, // mov  eax, 0x12345678 (pLdrLoadDll)
 	0xFF, 0xD0,                   // call eax
 	0x8B, 0x03,                   // mov  eax, [ebx]
-	0x05, 0x78, 0x56, 0x34, 0x12, // add  eax, 0x12345678 (Exported function RVA)
+	0x05, 0x78, 0x56, 0x34, 0x12, // add  eax, 0x12345678 (Arg RVA)
+	0xFF, 0xD0,                   // call eax
+	0x50,                         // push eax
+	0x8B, 0x03,                   // mov  eax, [ebx]
+	0x05, 0x78, 0x56, 0x34, 0x12, // add  eax, 0x12345678 (Handler RVA)
 	0xFF, 0xD0,                   // call eax
 	0x89, 0xEC,                   // mov  esp, ebp
 	0xC3                          // ret
@@ -215,7 +223,10 @@ struct arch_traits_t
 	static const size_t unicodeStringOffset = 19;
 	static const size_t hmodudeOffset = 29;
 	static const size_t ldrLoadDllOffset = 42;
-	static const size_t exportedFuncRVAOffset = 57;
+	static const size_t callArgCodeOffset = 52;
+	static const size_t callArgCodeSize = 14;
+	static const size_t argFuncRVAOffset = 57;
+	static const size_t handlerFuncRVAOffset = 71;
 
 	static constexpr auto GetInjectedCode()
 	{
@@ -232,7 +243,10 @@ struct arch_traits_t<false>
 	static const size_t unicodeStringOffset = 9;
 	static const size_t hmodudeOffset = 3;
 	static const size_t ldrLoadDllOffset = 18;
-	static const size_t exportedFuncRVAOffset = 27;
+	static const size_t callArgCodeOffset = 24;
+	static const size_t callArgCodeSize = 10;
+	static const size_t argFuncRVAOffset = 27;
+	static const size_t handlerFuncRVAOffset = 37;
 
 	static constexpr auto GetInjectedCode()
 	{
@@ -278,14 +292,21 @@ static std::vector<uint8_t> GetCodeBuffer(const std::string& dllPath, const std:
 	{
 		bool Filter(std::string_view name) override
 		{
-			return (name == "Handler");
+			return (name == "Handler" || name == "Arg");
 		}
 	} filter;
 	auto exports = ParseDllExport<false>(dllPath, filter, true, isAMD64 ? CPUArch::X64 : CPUArch::X86);
-	if (exports.empty())
+	auto handler = exports.find("Handler");
+	if (handler == exports.end())
 		throw std::logic_error(dllPath + "!" + funcName + " does not exist");
 
-	*(uint32_t*)(epNewBytes.data() + arch_traits_t<isAMD64>::exportedFuncRVAOffset) = exports.begin()->second;
+	auto arg = exports.find("Arg");
+	if (arg != exports.end())
+		*(uint32_t*)(epNewBytes.data() + arch_traits_t<isAMD64>::argFuncRVAOffset) = arg->second;
+	else
+		std::fill_n(epNewBytes.data() + arch_traits_t<isAMD64>::callArgCodeOffset, arch_traits_t<isAMD64>::callArgCodeSize, 0x90 /* nop */);
+
+	*(uint32_t*)(epNewBytes.data() + arch_traits_t<isAMD64>::handlerFuncRVAOffset) = handler->second;
 
 	return epNewBytes;
 }

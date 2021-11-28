@@ -8,8 +8,13 @@ BOOL WINAPI DllMain(
 	return TRUE;		
 }
 
-extern "C" __declspec(dllexport) void Handler()
+extern "C" __declspec(dllexport) void Handler(const char * text)
 {
 	while(true)
-		MessageBoxA(nullptr, "Message", "Text", MB_OK);
+		MessageBoxA(nullptr, text, "Text", MB_OK);
+}
+
+extern "C" __declspec(dllexport) const char* Arg()
+{
+	return "whatever";
 }
