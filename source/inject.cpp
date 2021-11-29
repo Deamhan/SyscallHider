@@ -8,13 +8,14 @@
 #include "cmdline.hpp"
 #include "util.hpp"
 
-static CmdLineOptionValue gExec = {}, gDll = {}, gFunc = {};
+static CmdLineOptionValue gExec = {}, gDll = {}, gFunc = {}, gArg = {};
 
 static const std::vector<CmdLineOption> gCmdLineOptions
 {
-	{ 'e', "Exec",     "Exec file to run and inject",       "", true, gExec },
-	{ 'd', "DLL",      "DLL payload",                       "", true, gDll  },
-	{ 'f', "Function", "Function from payload DLL to call", "", true, gFunc },
+	{ 'e', "Exec",     "Exec file to run and inject",       "",        true,  gExec },
+	{ 'd', "DLL",      "DLL payload",                       "",        true,  gDll  },
+	{ 'f', "Function", "Function from payload DLL to call", "Handler", false, gFunc },
+	{ 'a', "Arg",      "Argument provider function",        "Arg",     false, gArg  },
 };
 
 static const char* coloredErrorPattern = "\x1b[91mError: %s\n\x1b[m";
@@ -54,7 +55,7 @@ int main(int argc, const char** argv)
 		auto NtProtectVirtualMemory64 = GET_SYSCALL_PTR(ntdll, NtProtectVirtualMemory);
 
 		auto [ep, pLdrLoadDll, isAMD64] = GetProcessInfo(NtQueryVirtualMemory64, NtReadVirtualMemory64, (uint64_t)pi.hProcess);
-		auto epNewBytes = GetCodeBuffer(isAMD64, gDll.first, gFunc.first, ep, pLdrLoadDll);
+		auto epNewBytes = GetCodeBuffer(isAMD64, gDll.first, gFunc.first, gArg.first, ep, pLdrLoadDll);
 
 		uint64_t addressToVProt = ep;
 		uint64_t sizeToVProt = epNewBytes.size();

@@ -86,4 +86,5 @@ std::tuple<uint64_t, uint64_t, bool> GetProcessInfo(
 	NtReadVirtualMemory64_t NtReadVirtualMemory,
 	uint64_t processHandle);
 
-std::vector<uint8_t> GetCodeBuffer(bool isAMD64, const std::string& dllPath, const std::string& funcName, uint64_t ep, uint64_t pLdrLoadDll);
+std::vector<uint8_t> GetCodeBuffer(bool isAMD64, const std::string& dllPath, const std::string& funcName,
+	const std::string& argName, uint64_t ep, uint64_t pLdrLoadDll);

@@ -258,7 +258,8 @@ struct arch_traits_t<false>
 };
 
 template <bool isAMD64>
-static std::vector<uint8_t> GetCodeBuffer(const std::string& dllPath, const std::string& funcName, uint64_t ep, uint64_t pLdrLoadDll)
+static std::vector<uint8_t> GetCodeBuffer(const std::string& dllPath, const std::string& funcName, const std::string& argName, 
+	uint64_t ep, uint64_t pLdrLoadDll)
 {
 	typedef typename arch_traits_t<isAMD64>::ptr_t ptr_t;
 	typedef typename arch_traits_t<isAMD64>::unicode_str_t unicode_str_t;
@@ -288,19 +289,25 @@ static std::vector<uint8_t> GetCodeBuffer(const std::string& dllPath, const std:
 	*(ptr_t*)(epNewBytes.data() + arch_traits_t<isAMD64>::hmodudeOffset) = ep + codeSize;
 	*(ptr_t*)(epNewBytes.data() + arch_traits_t<isAMD64>::ldrLoadDllOffset) = pLdrLoadDll;
 
-	class SyscallFilter : public IFilter
+	class UserLibFilter : public IFilter
 	{
+		const std::string& mFuncName;
+		const std::string& mArgName;
+	public:
+		UserLibFilter(const std::string& funcName, const std::string& argName) :
+			mFuncName(funcName), mArgName(argName) {}
+
 		bool Filter(std::string_view name) override
 		{
-			return (name == "Handler" || name == "Arg");
+			return (name == mFuncName || name == mArgName);
 		}
-	} filter;
+	} filter(funcName, argName);
 	auto exports = ParseDllExport<false>(dllPath, filter, true, isAMD64 ? CPUArch::X64 : CPUArch::X86);
-	auto handler = exports.find("Handler");
+	auto handler = exports.find(funcName);
 	if (handler == exports.end())
 		throw std::logic_error(dllPath + "!" + funcName + " does not exist");
 
-	auto arg = exports.find("Arg");
+	auto arg = exports.find(argName);
 	if (arg != exports.end())
 		*(uint32_t*)(epNewBytes.data() + arch_traits_t<isAMD64>::argFuncRVAOffset) = arg->second;
 	else
@@ -311,10 +318,11 @@ static std::vector<uint8_t> GetCodeBuffer(const std::string& dllPath, const std:
 	return epNewBytes;
 }
 
-std::vector<uint8_t> GetCodeBuffer(bool isAMD64, const std::string& dllPath, const std::string& funcName, uint64_t ep, uint64_t pLdrLoadDll)
+std::vector<uint8_t> GetCodeBuffer(bool isAMD64, const std::string& dllPath, const std::string& funcName, const std::string& argName, 
+	uint64_t ep, uint64_t pLdrLoadDll)
 {
 	if (isAMD64)
-		return GetCodeBuffer<true>(dllPath, funcName, ep, pLdrLoadDll);
+		return GetCodeBuffer<true>(dllPath, funcName, argName, ep, pLdrLoadDll);
 
-	return GetCodeBuffer<false>(dllPath, funcName, ep, pLdrLoadDll);
+	return GetCodeBuffer<false>(dllPath, funcName, argName, ep, pLdrLoadDll);
 }
