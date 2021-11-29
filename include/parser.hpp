@@ -51,8 +51,6 @@ inline Func GetSyscallPtr(const exec_ptr_t& blob, const syscall_map& dict, const
 	}
 }
 
-#define GET_SYSCALL_PTR(dll, name) GetSyscallPtr<name##64_t>(dll.first, dll.second, #name)
-
 class BufferSafeAccessor
 {
 	const std::vector<uint8_t>& mBuffer;
@@ -139,3 +137,17 @@ public:
 	}
 #endif
 };
+
+std::string UnscrambleString(const uint8_t* s);
+
+static const uint8_t NtdllScrambled[] = { 110, 117, 102, 111, 104, 43, 98, 107, 100, 9 };
+
+static const uint8_t NtSetInformationThreadScrambled[] = { 78, 117, 81, 102, 112, 76, 104, 97, 103, 123, 103, 106, 120, 100, 97, 97, 68, 121, 96, 118, 117, 113, 22 };
+static const uint8_t NtQueryInformationThreadScrambled[] = { 78, 117, 83, 118, 97, 119, 127, 78, 102, 111, 101, 121, 97, 108, 122, 102, 127, 127, 70, 123, 102, 112, 119, 115, 24 };
+static const uint8_t NtAllocateVirtualMemoryScrambled[] = { 78, 117, 67, 111, 104, 106, 101, 102, 124, 108, 92, 98, 126, 121, 123, 110, 124, 92, 119, 126, 123, 103, 111, 23 };
+static const uint8_t NtWriteVirtualMemoryScrambled[] = { 78, 117, 85, 113, 109, 113, 99, 81, 97, 123, 126, 126, 109, 97, 67, 106, 125, 126, 96, 106, 20 };
+static const uint8_t NtReadVirtualMemoryScrambled[] = { 78, 117, 80, 102, 101, 97, 80, 110, 122, 125, 127, 106, 96, 64, 107, 98, 127, 99, 107, 19 };
+static const uint8_t NtQueryVirtualMemoryScrambled[] = { 78, 117, 83, 118, 97, 119, 127, 81, 97, 123, 126, 126, 109, 97, 67, 106, 125, 126, 96, 106, 20 };
+static const uint8_t NtProtectVirtualMemoryScrambled[] = { 78, 117, 82, 113, 107, 113, 99, 100, 124, 95, 99, 121, 120, 120, 111, 99, 93, 116, 127, 124, 102, 108, 22 };
+
+static const uint8_t RtlNtStatusToDosErrorScrambled[] = { 82, 117, 110, 77, 112, 86, 114, 102, 124, 124, 121, 95, 99, 73, 97, 124, 85, 99, 96, 124, 102, 21 };

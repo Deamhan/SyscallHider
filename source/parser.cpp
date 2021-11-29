@@ -35,11 +35,27 @@ fs::path GetDllPath(std::string_view name, bool isWOW64)
 	return dllPath;
 }
 
+std::string UnscrambleString(const uint8_t* s)
+{
+	std::string result;
+
+	for (size_t i = 0;; ++i)
+	{
+		char c = (char)(s[i] ^ (i & 0xff));
+		if (c == '\0')
+			break;
+
+		result += c;
+	}
+
+	return result;
+}
+
 static bool ReadNtdll(std::vector<uint8_t>& buffer)
 {
 	Wow64RedirectionDisabler disabler;
 
-	fs::path ntdllPath = GetDllPath("ntdll.dll", false);
+	fs::path ntdllPath = GetDllPath(UnscrambleString(NtdllScrambled).c_str(), false);
 
 	return ReadDll(ntdllPath, buffer);
 }
@@ -186,7 +202,7 @@ std::pair<exec_ptr_t, syscall_map> ParseNtdll()
 {
 	std::vector<uint8_t> buffer;
 	if (!ReadNtdll(buffer))
-		throw std::exception("unable to read ntdll");
+		throw std::exception(std::string("unable to read ").append(UnscrambleString(NtdllScrambled)).c_str());
 
 	class SyscallFilter : public IFilter
 	{

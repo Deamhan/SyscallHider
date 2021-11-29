@@ -79,6 +79,8 @@ typedef NTSTATUS(NTAPI* NtQueryVirtualMemory64_t)(
 	uint64_t MemoryInformationLength,
 	uint64_t ReturnLength);
 
+typedef ULONG(NTAPI* RtlNtStatusToDosError_t)(NTSTATUS Status);
+
 void EnableVTMode();
 
 std::tuple<uint64_t, uint64_t, bool> GetProcessInfo(
@@ -88,3 +90,8 @@ std::tuple<uint64_t, uint64_t, bool> GetProcessInfo(
 
 std::vector<uint8_t> GetCodeBuffer(bool isAMD64, const std::string& dllPath, const std::string& funcName,
 	const std::string& argName, uint64_t ep, uint64_t pLdrLoadDll);
+
+#define GET_SYSCALL_PTR(dll, name) GetSyscallPtr<name##64_t>(dll.first, dll.second, UnscrambleString(name##Scrambled).c_str())
+
+#define GET_NTDLL_FUNCTION(function) (function##_t)GetProcAddress(GetModuleHandleA(UnscrambleString(NtdllScrambled).c_str()), \
+	UnscrambleString(function##Scrambled).c_str());

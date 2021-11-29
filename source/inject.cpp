@@ -61,14 +61,14 @@ int main(int argc, const char** argv)
 		uint64_t sizeToVProt = epNewBytes.size();
 		uint64_t oldVProt = 0;
 
-		typedef ULONG(NTAPI* RtlNtStatusToDosError_t)(NTSTATUS Status);
-		auto RtlNtStatusToDosError = (RtlNtStatusToDosError_t)GetProcAddress(GetModuleHandleA("ntdll"), "RtlNtStatusToDosError");
+		
+		auto RtlNtStatusToDosError = GET_NTDLL_FUNCTION(RtlNtStatusToDosError);
 		auto CheckStatus = [RtlNtStatusToDosError](NTSTATUS Status, HANDLE hProc)
 		{
 			if (NT_SUCCESS(Status))
 				return;
 
-			throw std::system_error(RtlNtStatusToDosError(Status), std::generic_category(), "ntapi call failed");
+			throw std::system_error(RtlNtStatusToDosError(Status), std::generic_category(), "native api call failed");
 		};
 
 		CheckStatus(X64Syscall(NtProtectVirtualMemory64, pi.hProcess, &addressToVProt, &sizeToVProt, PAGE_EXECUTE_READWRITE, &oldVProt), pi.hProcess);
