@@ -7,6 +7,8 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 
 set(NTDLL64LL ${PROJECT_SOURCE_DIR}/lib/ntdll64ll.obj)
 
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 set(HIDER_COMMON source/parser.cpp)
 
 add_executable(injector ${HIDER_COMMON}
@@ -34,4 +36,7 @@ else()
     target_link_libraries(injector ${NTDLL64LL})
     target_link_libraries(test ${NTDLL64LL})
 endif()
-                        
+
+if (MSVC)
+    target_compile_options(payload PRIVATE "$<$<CONFIG:Release>:/guard:cf>")
+endif()
