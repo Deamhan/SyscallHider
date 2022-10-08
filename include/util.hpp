@@ -81,6 +81,48 @@ typedef NTSTATUS(NTAPI* NtQueryVirtualMemory64_t)(
 
 typedef ULONG(NTAPI* RtlNtStatusToDosError_t)(NTSTATUS Status);
 
+typedef NTSTATUS(NTAPI* NtCreateThreadEx64_t)(
+	uint64_t hThread,
+	uint64_t DesiredAccess,
+	uint64_t ObjectAttributes,
+	uint64_t ProcessHandle,
+	uint64_t lpStartAddress,
+	uint64_t lpParameter,
+	uint64_t Flags,
+	uint64_t StackZeroBits,
+	uint64_t SizeOfStackCommit,
+	uint64_t SizeOfStackReserve,
+	uint64_t lpBytesBuffer);
+
+typedef struct _UNICODE_STRING {
+	USHORT Length;
+	USHORT MaximumLength;
+	PWSTR  Buffer;
+} UNICODE_STRING, * PUNICODE_STRING;
+
+typedef struct _OBJECT_ATTRIBUTES {
+	ULONG           Length;
+	HANDLE          RootDirectory;
+	PUNICODE_STRING ObjectName;
+	ULONG           Attributes;
+	PVOID           SecurityDescriptor;
+	PVOID           SecurityQualityOfService;
+} OBJECT_ATTRIBUTES, *POBJECT_ATTRIBUTES;
+
+typedef struct _CLIENT_ID {
+	HANDLE UniqueProcess;
+	HANDLE UniqueThread;
+} CLIENT_ID, *PCLIENT_ID;
+
+typedef NTSTATUS(NTAPI* NtOpenProcess_t)(
+	PHANDLE            ProcessHandle,
+	ACCESS_MASK        DesiredAccess,
+	POBJECT_ATTRIBUTES ObjectAttributes,
+	PCLIENT_ID         ClientId
+);
+
+using HandleGuard = std::unique_ptr<std::remove_pointer_t<HANDLE>, BOOL (WINAPI*)(HANDLE)>;
+
 void EnableVTMode();
 
 std::tuple<uint64_t, uint64_t, bool> GetProcessInfo(
@@ -89,9 +131,11 @@ std::tuple<uint64_t, uint64_t, bool> GetProcessInfo(
 	uint64_t processHandle);
 
 std::vector<uint8_t> GetCodeBuffer(bool isAMD64, const std::string& dllPath, const std::string& funcName,
-	const std::string& argName, uint64_t ep, uint64_t pLdrLoadDll);
+	const std::string& argName, uint64_t ep, uint64_t pLdrLoadDll, uint32_t argsCount);
 
 #define GET_SYSCALL_PTR(dll, name) GetSyscallPtr<name##64_t>(dll.first, dll.second, UnscrambleString(name##Scrambled).c_str())
 
 #define GET_NTDLL_FUNCTION(function) (function##_t)GetProcAddress(GetModuleHandleA(UnscrambleString(NtdllScrambled).c_str()), \
 	UnscrambleString(function##Scrambled).c_str());
+
+bool EnableDebugPrivilege();

@@ -180,6 +180,7 @@ static const uint8_t injectedCode64[] = {
 	0xC3                                                        // ret
 };
 
+// __stdcall/__cdecl (argCount must be 0) compatible code
 static const uint8_t injectedCode32[] = {
 	0x89, 0xE5,                   // mov  ebp, esp
 	0xBB, 0x78, 0x56, 0x34, 0x12, // mov  ebx, 0x12345678 (PHMODULE)
@@ -198,7 +199,7 @@ static const uint8_t injectedCode32[] = {
 	0x05, 0x78, 0x56, 0x34, 0x12, // add  eax, 0x12345678 (Handler RVA)
 	0xFF, 0xD0,                   // call eax
 	0x89, 0xEC,                   // mov  esp, ebp
-	0xC3                          // ret
+	0xC2, 0x00, 0x00              // ret  0
 };
 
 #pragma pack (push, 4)
@@ -259,7 +260,7 @@ struct arch_traits_t<false>
 
 template <bool isAMD64>
 static std::vector<uint8_t> GetCodeBuffer(const std::string& dllPath, const std::string& funcName, const std::string& argName, 
-	uint64_t ep, uint64_t pLdrLoadDll)
+	uint64_t ep, uint64_t pLdrLoadDll, uint32_t argsCount)
 {
 	typedef typename arch_traits_t<isAMD64>::ptr_t ptr_t;
 	typedef typename arch_traits_t<isAMD64>::unicode_str_t unicode_str_t;
@@ -288,6 +289,8 @@ static std::vector<uint8_t> GetCodeBuffer(const std::string& dllPath, const std:
 	*(ptr_t*)(epNewBytes.data() + arch_traits_t<isAMD64>::unicodeStringOffset) = ep + usOffset;
 	*(ptr_t*)(epNewBytes.data() + arch_traits_t<isAMD64>::hmodudeOffset) = ep + codeSize;
 	*(ptr_t*)(epNewBytes.data() + arch_traits_t<isAMD64>::ldrLoadDllOffset) = pLdrLoadDll;
+	if (!isAMD64)
+		*(uint16_t*)&epNewBytes[codeSize - sizeof(uint16_t)] = (uint16_t)(argsCount * sizeof(uint32_t)); // ret 4 * argsCount, __stdcall only
 
 	class UserLibFilter : public IFilter
 	{
@@ -319,10 +322,29 @@ static std::vector<uint8_t> GetCodeBuffer(const std::string& dllPath, const std:
 }
 
 std::vector<uint8_t> GetCodeBuffer(bool isAMD64, const std::string& dllPath, const std::string& funcName, const std::string& argName, 
-	uint64_t ep, uint64_t pLdrLoadDll)
+	uint64_t ep, uint64_t pLdrLoadDll, uint32_t argsCount)
 {
 	if (isAMD64)
-		return GetCodeBuffer<true>(dllPath, funcName, argName, ep, pLdrLoadDll);
+		return GetCodeBuffer<true>(dllPath, funcName, argName, ep, pLdrLoadDll, 0);
 
-	return GetCodeBuffer<false>(dllPath, funcName, argName, ep, pLdrLoadDll);
+	return GetCodeBuffer<false>(dllPath, funcName, argName, ep, pLdrLoadDll, argsCount);
+}
+
+bool EnableDebugPrivilege()
+{
+	HANDLE hToken;
+	LUID DebugValue;
+	TOKEN_PRIVILEGES tkp;
+
+	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken))
+		return false;
+
+	HandleGuard tokenGuard(hToken, CloseHandle);
+	if (!LookupPrivilegeValueW(nullptr, L"SeDebugPrivilege", &DebugValue))
+		return false;
+
+	tkp.PrivilegeCount = 1;
+	tkp.Privileges[0].Luid = DebugValue;
+	tkp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+	return (FALSE != AdjustTokenPrivileges(hToken, FALSE, &tkp, sizeof(TOKEN_PRIVILEGES), nullptr, nullptr));
 }

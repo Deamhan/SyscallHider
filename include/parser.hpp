@@ -149,5 +149,6 @@ static const uint8_t NtWriteVirtualMemoryScrambled[] = { 78, 117, 85, 113, 109, 
 static const uint8_t NtReadVirtualMemoryScrambled[] = { 78, 117, 80, 102, 101, 97, 80, 110, 122, 125, 127, 106, 96, 64, 107, 98, 127, 99, 107, 19 };
 static const uint8_t NtQueryVirtualMemoryScrambled[] = { 78, 117, 83, 118, 97, 119, 127, 81, 97, 123, 126, 126, 109, 97, 67, 106, 125, 126, 96, 106, 20 };
 static const uint8_t NtProtectVirtualMemoryScrambled[] = { 78, 117, 82, 113, 107, 113, 99, 100, 124, 95, 99, 121, 120, 120, 111, 99, 93, 116, 127, 124, 102, 108, 22 };
+static const uint8_t NtCreateThreadExScrambled[] = { 78, 117, 65, 113, 97, 100, 114, 98, 92, 97, 120, 110, 109, 105, 75, 119, 16 };
 
 static const uint8_t RtlNtStatusToDosErrorScrambled[] = { 82, 117, 110, 77, 112, 86, 114, 102, 124, 124, 121, 95, 99, 73, 97, 124, 85, 99, 96, 124, 102, 21 };
