@@ -12,11 +12,11 @@ static CmdLineOptionValue gPid = {}, gExec = {}, gDll = {}, gFunc = {}, gArg = {
 
 static const std::vector<CmdLineOption> gCmdLineOptions
 {
-	{ 'p', "Pid",      "PID of process to inject (incompatible with 'Exec' option)",          "",        false, gPid  },
-	{ 'e', "Exec",     "Exec file to run and inject (incompatible with 'Pid' option)",        "",        false, gExec },
-	{ 'd', "DLL",      "DLL payload",                                                         "",        true,  gDll  },
-	{ 'f', "Function", "Function from payload DLL to call",                                   "Handler", false, gFunc },
-	{ 'a', "Arg",      "Argument provider function",                                          "Arg",     false, gArg  },
+	{ 'p', "Pid",      "PID of process to inject (incompatible with 'Exec' option)",                           "",        false, gPid  },
+	{ 'e', "Exec",     "Exec file (cmd line is supported) to run and inject (incompatible with 'Pid' option)", "",        false, gExec },
+	{ 'd', "DLL",      "DLL payload",                                                                          "",        true,  gDll  },
+	{ 'f', "Function", "Function from payload DLL to call",                                                    "Handler", false, gFunc },
+	{ 'a', "Arg",      "Argument provider function",                                                           "Arg",     false, gArg  },
 };
 
 static const char* coloredErrorPattern = "\x1b[91mError: %s\n\x1b[m";
